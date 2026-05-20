@@ -2,8 +2,8 @@
 
 ## Overview
 
-- `cargo-kill-all` is a Rust CLI that scans a directory tree for Cargo and npm projects, calculates reclaimable cache/build directory size, and deletes selected targets.
-- The package is published as `cargo-kill-all` and currently uses manual versioning in `Cargo.toml`.
+- `cargo-killer` is a Rust CLI that scans a directory tree for Cargo and npm projects, calculates reclaimable cache/build directory size, and deletes selected targets.
+- The package is published as `cargo-killer` and currently uses manual versioning in `Cargo.toml`.
 - Main implementation files are `src/main.rs`, `src/find.rs`, and `src/utils.rs`.
 
 ## Build and test commands

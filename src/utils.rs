@@ -77,22 +77,43 @@ mod tests {
     use super::*;
     use std::{
         fs,
-        time::{SystemTime, UNIX_EPOCH},
+        path::{Path, PathBuf},
+        sync::atomic::{AtomicU64, Ordering},
     };
 
-    fn temp_path(name: &str) -> std::path::PathBuf {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time should be after UNIX epoch")
-            .as_nanos();
-        std::env::temp_dir().join(format!("cargo-kill-{name}-{}-{now}", std::process::id()))
+    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let id = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
+            Self {
+                path: std::env::temp_dir()
+                    .join(format!("cargo-kill-{name}-{}-{id}", std::process::id())),
+            }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            if self.path.exists() {
+                fs::remove_dir_all(&self.path).expect("cleanup test directory");
+            }
+        }
     }
 
     #[test]
     fn npm_framework_targets_detects_supported_dependencies_once() {
-        let root = temp_path("npm-frameworks");
-        fs::create_dir_all(&root).expect("create test directory");
-        let package_json = root.join("package.json");
+        let root = TestDir::new("npm-frameworks");
+        fs::create_dir_all(root.path()).expect("create test directory");
+        let package_json = root.path().join("package.json");
         fs::write(
             &package_json,
             r#"{
@@ -105,36 +126,33 @@ mod tests {
         let targets = npm_framework_targets(&package_json);
 
         assert_eq!(targets, vec![".next", ".nuxt", ".output", ".svelte-kit"]);
-
-        fs::remove_dir_all(root).expect("cleanup test directory");
     }
 
     #[test]
     fn npm_framework_targets_ignores_missing_or_malformed_package_json() {
-        let root = temp_path("npm-invalid");
-        fs::create_dir_all(&root).expect("create test directory");
-        let package_json = root.join("package.json");
+        let root = TestDir::new("npm-invalid");
+        fs::create_dir_all(root.path()).expect("create test directory");
+        let package_json = root.path().join("package.json");
 
         assert!(npm_framework_targets(&package_json).is_empty());
 
         fs::write(&package_json, r#"{"dependencies":{"next""#).expect("write invalid JSON");
         assert!(npm_framework_targets(&package_json).is_empty());
-
-        fs::remove_dir_all(root).expect("cleanup test directory");
     }
 
     #[test]
     fn npm_targets_always_includes_node_modules() {
-        let root = temp_path("npm-targets");
-        fs::create_dir_all(&root).expect("create test directory");
+        let root = TestDir::new("npm-targets");
+        fs::create_dir_all(root.path()).expect("create test directory");
         fs::write(
-            root.join("package.json"),
+            root.path().join("package.json"),
             r#"{"devDependencies":{"@sveltejs/kit":"2"}}"#,
         )
         .expect("write package.json");
 
-        assert_eq!(npm_targets(&root), vec!["node_modules", ".svelte-kit"]);
-
-        fs::remove_dir_all(root).expect("cleanup test directory");
+        assert_eq!(
+            npm_targets(root.path()),
+            vec!["node_modules", ".svelte-kit"]
+        );
     }
 }

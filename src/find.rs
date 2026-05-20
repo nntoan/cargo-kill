@@ -258,21 +258,41 @@ mod tests {
     use std::{
         fs,
         io::Write,
-        time::{SystemTime, UNIX_EPOCH},
+        sync::atomic::{AtomicU64, Ordering},
     };
 
-    fn temp_path(name: &str) -> PathBuf {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system time should be after UNIX epoch")
-            .as_nanos();
-        std::env::temp_dir().join(format!("cargo-kill-{name}-{}-{now}", std::process::id()))
+    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let id = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
+            Self {
+                path: std::env::temp_dir()
+                    .join(format!("cargo-kill-{name}-{}-{id}", std::process::id())),
+            }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            if self.path.exists() {
+                fs::remove_dir_all(&self.path).expect("cleanup test directory");
+            }
+        }
     }
 
     #[test]
     fn recursive_scan_target_ignores_symlinks() {
-        let root = temp_path("symlink");
-        let target = root.join("target");
+        let root = TestDir::new("symlink");
+        let target = root.path().join("target");
         fs::create_dir_all(&target).expect("create target directory");
         fs::write(target.join("artifact"), [0_u8; 4]).expect("write artifact");
 
@@ -284,14 +304,12 @@ mod tests {
 
         let (size, _) = ProjectTargetAnalysis::recursive_scan_target(&target);
         assert_eq!(size, 4);
-
-        fs::remove_dir_all(root).expect("cleanup test directory");
     }
 
     #[test]
     fn analyze_all_projects_detects_multiple_kinds_and_accepts_zero_threads() {
-        let root = temp_path("scan");
-        let project = root.join("combo");
+        let root = TestDir::new("scan");
+        let project = root.path().join("combo");
         fs::create_dir_all(project.join("target/debug")).expect("create cargo target");
         fs::create_dir_all(project.join("node_modules")).expect("create node_modules");
         fs::create_dir_all(project.join(".next/cache")).expect("create next cache");
@@ -309,7 +327,7 @@ mod tests {
         fs::write(project.join("node_modules/module"), [0_u8; 3]).expect("write module");
         fs::write(project.join(".next/cache/item"), [0_u8; 5]).expect("write cache item");
 
-        let projects = analyze_all_projects(&root, 0, false);
+        let projects = analyze_all_projects(root.path(), 0, false);
 
         assert_eq!(projects.len(), 1);
         let analysis = &projects[0];
@@ -317,28 +335,24 @@ mod tests {
         assert_eq!(analysis.kinds, vec!["cargo", "npm"]);
         assert_eq!(analysis.targets, vec!["target", "node_modules", ".next"]);
         assert_eq!(analysis.size, 10);
-
-        fs::remove_dir_all(root).expect("cleanup test directory");
     }
 
     #[test]
     fn analyze_all_projects_surfaces_git_only_when_requested() {
-        let root = temp_path("git");
-        let checkout = root.join("checkout");
+        let root = TestDir::new("git");
+        let checkout = root.path().join("checkout");
         fs::create_dir_all(checkout.join(".git/objects")).expect("create git directory");
         let mut file =
             fs::File::create(checkout.join(".git/objects/object")).expect("create git object");
         file.write_all(&[0_u8; 7]).expect("write git object");
 
-        let without_git = analyze_all_projects(&root, 2, false);
+        let without_git = analyze_all_projects(root.path(), 2, false);
         assert!(without_git.is_empty());
 
-        let with_git = analyze_all_projects(&root, 2, true);
+        let with_git = analyze_all_projects(root.path(), 2, true);
         assert_eq!(with_git.len(), 1);
         assert_eq!(with_git[0].kinds, vec!["git"]);
         assert_eq!(with_git[0].targets, vec![".git"]);
         assert_eq!(with_git[0].size, 7);
-
-        fs::remove_dir_all(root).expect("cleanup test directory");
     }
 }

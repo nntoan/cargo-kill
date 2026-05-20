@@ -16,7 +16,7 @@ mod utils;
     author,
     version,
     about,
-    bin_name = "cargo kill-all",
+    bin_name = "cargo killer",
     long_about = "Scan a directory tree for cargo and npm projects (and optionally .git directories) and reclaim their build/cache space."
 )]
 struct KillArgs {
@@ -49,9 +49,9 @@ struct KillArgs {
 fn main() {
     let mut args = std::env::args();
 
-    // When called using `cargo kill-all` the argument `kill-all` is inserted.
+    // When called using `cargo killer` the argument `killer` is inserted.
     // It is not required, so remove  it
-    if let Some("kill-all") = std::env::args().nth(1).as_deref() {
+    if let Some("killer") = std::env::args().nth(1).as_deref() {
         args.next();
     }
     let args = KillArgs::parse_from(args);

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Build a throwaway directory tree to try cargo-kill-all against.
+# Build a throwaway directory tree to try cargo-killer against.
 #
 # Usage:
 #   scripts/make-sample-tree.sh [DIR]    # create at DIR (default: /tmp/ck-sample)
 #   scripts/make-sample-tree.sh --clean [DIR]   # delete it
 #
 # After creating, try:
-#   cargo-kill-all DIR -p npm -d
-#   cargo-kill-all DIR -p cargo -d
+#   cargo-killer DIR -p npm -d
+#   cargo-killer DIR -p cargo -d
 # Drop -d to actually delete (you'll be prompted).
 
 set -euo pipefail
@@ -128,8 +128,8 @@ cat <<EOF
 Sample tree created at: $ROOT
 
 Try it:
-  cargo-kill-all $ROOT -d                  # dry run, all detectors
-  cargo-kill-all $ROOT -d --include-git    # also surface .git directories
+  cargo-killer $ROOT -d                  # dry run, all detectors
+  cargo-killer $ROOT -d --include-git    # also surface .git directories
 
 Expected rows (no --include-git):
   next-app       npm         node_modules, .next

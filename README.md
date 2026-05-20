@@ -4,11 +4,11 @@
 
 ## Installation
 
-> `cargo install cargo-kill-all`
+> `cargo install cargo-killer`
 
 ## Usage
 
-> `cargo-kill-all /home/Documents/ -t 4`
+> `cargo-killer /home/Documents/ -t 4`
 
 A single pass scans the tree and lists every detected project. No project-type
 flag is needed — cargo and npm projects show up together, and a directory
