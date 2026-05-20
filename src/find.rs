@@ -180,7 +180,7 @@ fn find_projects_in_path(
                 include_git,
                 job_sender: job_sender.clone(),
             })
-            .unwrap();
+            .ok();
     }
 
     if !found_targets.is_empty() {
@@ -190,7 +190,7 @@ fn find_projects_in_path(
         );
         results
             .send(ProjectTargetAnalysis::analyze(path, kinds, found_targets))
-            .unwrap();
+            .ok();
         sp.stop_with_symbol("✓");
         println!("\r");
     }
@@ -203,7 +203,7 @@ pub fn analyze_all_projects(
     mut num_threads: usize,
     include_git: bool,
 ) -> Vec<ProjectTargetAnalysis> {
-    num_threads = std::cmp::min(num_cpus::get(), num_threads);
+    num_threads = std::cmp::min(num_cpus::get(), num_threads.max(1));
 
     println!("Using {} threads", num_threads);
 
@@ -234,10 +234,101 @@ pub fn analyze_all_projects(
                 include_git,
                 job_sender,
             })
-            .unwrap();
+            .ok();
 
         result_receiver
     }
     .into_iter()
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        fs,
+        io::Write,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn temp_path(name: &str) -> PathBuf {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after UNIX epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!(
+            "cargo-kill-{name}-{}-{now}",
+            std::process::id()
+        ))
+    }
+
+    #[test]
+    fn recursive_scan_target_ignores_symlinks() {
+        let root = temp_path("symlink");
+        let target = root.join("target");
+        fs::create_dir_all(&target).expect("create target directory");
+        fs::write(target.join("artifact"), [0_u8; 4]).expect("write artifact");
+
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target.join("artifact"), target.join("linked"))
+                .expect("create symlink");
+        }
+
+        let (size, _) = ProjectTargetAnalysis::recursive_scan_target(&target);
+        assert_eq!(size, 4);
+
+        fs::remove_dir_all(root).expect("cleanup test directory");
+    }
+
+    #[test]
+    fn analyze_all_projects_detects_multiple_kinds_and_accepts_zero_threads() {
+        let root = temp_path("scan");
+        let project = root.join("combo");
+        fs::create_dir_all(project.join("target/debug")).expect("create cargo target");
+        fs::create_dir_all(project.join("node_modules")).expect("create node_modules");
+        fs::create_dir_all(project.join(".next/cache")).expect("create next cache");
+        fs::write(project.join("Cargo.toml"), "[package]\nname='combo'\nversion='0.1.0'\n")
+            .expect("write Cargo.toml");
+        fs::write(
+            project.join("package.json"),
+            r#"{"dependencies":{"next":"14"}}"#,
+        )
+        .expect("write package.json");
+        fs::write(project.join("target/debug/artifact"), [0_u8; 2]).expect("write artifact");
+        fs::write(project.join("node_modules/module"), [0_u8; 3]).expect("write module");
+        fs::write(project.join(".next/cache/item"), [0_u8; 5]).expect("write cache item");
+
+        let projects = analyze_all_projects(&root, 0, false);
+
+        assert_eq!(projects.len(), 1);
+        let analysis = &projects[0];
+        assert_eq!(analysis.project_path, project);
+        assert_eq!(analysis.kinds, vec!["cargo", "npm"]);
+        assert_eq!(analysis.targets, vec!["target", "node_modules", ".next"]);
+        assert_eq!(analysis.size, 10);
+
+        fs::remove_dir_all(root).expect("cleanup test directory");
+    }
+
+    #[test]
+    fn analyze_all_projects_surfaces_git_only_when_requested() {
+        let root = temp_path("git");
+        let checkout = root.join("checkout");
+        fs::create_dir_all(checkout.join(".git/objects")).expect("create git directory");
+        let mut file =
+            fs::File::create(checkout.join(".git/objects/object")).expect("create git object");
+        file.write_all(&[0_u8; 7]).expect("write git object");
+
+        let without_git = analyze_all_projects(&root, 2, false);
+        assert!(without_git.is_empty());
+
+        let with_git = analyze_all_projects(&root, 2, true);
+        assert_eq!(with_git.len(), 1);
+        assert_eq!(with_git[0].kinds, vec!["git"]);
+        assert_eq!(with_git[0].targets, vec![".git"]);
+        assert_eq!(with_git[0].size, 7);
+
+        fs::remove_dir_all(root).expect("cleanup test directory");
+    }
 }

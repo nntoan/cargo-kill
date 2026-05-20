@@ -1,5 +1,4 @@
 use crate::find::{analyze_all_projects, ProjectTargetAnalysis};
-use bytefmt;
 use clap::Parser;
 use inquire::{
     list_option::ListOption,
@@ -58,7 +57,7 @@ fn main() {
     let args = KillArgs::parse_from(args);
 
     let mut projects = analyze_all_projects(
-        &Path::new(&args.root_dir),
+        Path::new(&args.root_dir),
         args.num_threads,
         args.include_git,
     );
