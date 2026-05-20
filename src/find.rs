@@ -290,11 +290,8 @@ mod tests {
         fs::create_dir_all(&target).expect("create target directory");
         fs::write(target.join("artifact"), [0_u8; 4]).expect("write artifact");
 
-        #[cfg(unix)]
-        {
-            std::os::unix::fs::symlink(target.join("artifact"), target.join("linked"))
-                .expect("create symlink");
-        }
+        std::os::unix::fs::symlink(target.join("artifact"), target.join("linked"))
+            .expect("create symlink");
 
         let (size, _) = ProjectTargetAnalysis::recursive_scan_target(&target);
         assert_eq!(size, 4);
