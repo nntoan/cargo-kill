@@ -213,7 +213,7 @@ pub fn analyze_all_projects(
     mut num_threads: usize,
     include_git: bool,
 ) -> Vec<ProjectTargetAnalysis> {
-    num_threads = std::cmp::min(num_cpus::get(), num_threads.max(1));
+    num_threads = num_threads.max(1).min(num_cpus::get().max(1));
 
     println!("Using {} threads", num_threads);
 
