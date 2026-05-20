@@ -272,7 +272,7 @@ mod tests {
             let id = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
             Self {
                 path: std::env::temp_dir()
-                    .join(format!("cargo-kill-{name}-{}-{id}", std::process::id())),
+                    .join(format!("cargo-killer-{name}-{}-{id}", std::process::id())),
             }
         }
 
