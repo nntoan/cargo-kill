@@ -127,11 +127,21 @@ fn find_projects_in_path(
 
     let file_names: Vec<String> = files
         .iter()
-        .map(|f| f.file_name().unwrap_or_default().to_string_lossy().into_owned())
+        .map(|f| {
+            f.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
     let dir_names: Vec<String> = dirs
         .iter()
-        .map(|d| d.file_name().unwrap_or_default().to_string_lossy().into_owned())
+        .map(|d| {
+            d.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
 
     // Apply every detector. A dir can match multiple kinds.
@@ -256,10 +266,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system time should be after UNIX epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!(
-            "cargo-kill-{name}-{}-{now}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("cargo-kill-{name}-{}-{now}", std::process::id()))
     }
 
     #[test]
@@ -288,8 +295,11 @@ mod tests {
         fs::create_dir_all(project.join("target/debug")).expect("create cargo target");
         fs::create_dir_all(project.join("node_modules")).expect("create node_modules");
         fs::create_dir_all(project.join(".next/cache")).expect("create next cache");
-        fs::write(project.join("Cargo.toml"), "[package]\nname='combo'\nversion='0.1.0'\n")
-            .expect("write Cargo.toml");
+        fs::write(
+            project.join("Cargo.toml"),
+            "[package]\nname='combo'\nversion='0.1.0'\n",
+        )
+        .expect("write Cargo.toml");
         fs::write(
             project.join("package.json"),
             r#"{"dependencies":{"next":"14"}}"#,

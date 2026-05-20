@@ -85,10 +85,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system time should be after UNIX epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!(
-            "cargo-kill-{name}-{}-{now}",
-            std::process::id()
-        ))
+        std::env::temp_dir().join(format!("cargo-kill-{name}-{}-{now}", std::process::id()))
     }
 
     #[test]
@@ -107,10 +104,7 @@ mod tests {
 
         let targets = npm_framework_targets(&package_json);
 
-        assert_eq!(
-            targets,
-            vec![".next", ".nuxt", ".output", ".svelte-kit"]
-        );
+        assert_eq!(targets, vec![".next", ".nuxt", ".output", ".svelte-kit"]);
 
         fs::remove_dir_all(root).expect("cleanup test directory");
     }
