@@ -184,13 +184,11 @@ fn find_projects_in_path(
             continue;
         }
 
-        job_sender
-            .send(Job {
-                path: dir.to_path_buf(),
-                include_git,
-                job_sender: job_sender.clone(),
-            })
-            .ok();
+        let _ = job_sender.send(Job {
+            path: dir.to_path_buf(),
+            include_git,
+            job_sender: job_sender.clone(),
+        });
     }
 
     if !found_targets.is_empty() {
@@ -198,9 +196,7 @@ fn find_projects_in_path(
             spinners::Spinners::Dots,
             format!("Analyzing {}", &path.to_string_lossy()),
         );
-        results
-            .send(ProjectTargetAnalysis::analyze(path, kinds, found_targets))
-            .ok();
+        let _ = results.send(ProjectTargetAnalysis::analyze(path, kinds, found_targets));
         sp.stop_with_symbol("✓");
         println!("\r");
     }
@@ -237,14 +233,11 @@ pub fn analyze_all_projects(
                 });
             });
 
-        job_sender
-            .clone()
-            .send(Job {
-                path: path.to_path_buf(),
-                include_git,
-                job_sender,
-            })
-            .ok();
+        let _ = job_sender.clone().send(Job {
+            path: path.to_path_buf(),
+            include_git,
+            job_sender,
+        });
 
         result_receiver
     }
@@ -289,6 +282,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn recursive_scan_target_ignores_symlinks() {
         let root = TestDir::new("symlink");
