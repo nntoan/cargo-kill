@@ -47,12 +47,13 @@ struct KillArgs {
 }
 
 fn main() {
-    let mut args = std::env::args();
+    let mut args: Vec<String> = std::env::args().collect();
 
     // When called using `cargo killer` the argument `killer` is inserted.
     // It is not required, so remove it.
-    if let Some("killer") = std::env::args().nth(1).as_deref() {
-        args.next();
+    let is_cargo_subcommand_invocation = std::env::var_os("CARGO").is_some();
+    if is_cargo_subcommand_invocation && args.get(1).map(String::as_str) == Some("killer") {
+        args.remove(1);
     }
     let args = KillArgs::parse_from(args);
 
