@@ -50,7 +50,7 @@ fn main() {
     let mut args = std::env::args();
 
     // When called using `cargo killer` the argument `killer` is inserted.
-    // It is not required, so remove  it
+    // It is not required, so remove it.
     if let Some("killer") = std::env::args().nth(1).as_deref() {
         args.next();
     }
