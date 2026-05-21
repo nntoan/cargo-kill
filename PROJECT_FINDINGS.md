@@ -3,7 +3,7 @@
 ## Overview
 
 - `cargo-killer` is a Rust CLI that scans a directory tree for Cargo and npm projects, calculates reclaimable cache/build directory size, and deletes selected targets.
-- The package is published as `cargo-killer` and currently uses manual versioning in `Cargo.toml`.
+- The package is published as `cargo-killer`, with version bumps and changelog/release management handled through Release Please.
 - Main implementation files are `src/main.rs`, `src/find.rs`, and `src/utils.rs`.
 
 ## Build and test commands
