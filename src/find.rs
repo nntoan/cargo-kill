@@ -127,11 +127,21 @@ fn find_projects_in_path(
 
     let file_names: Vec<String> = files
         .iter()
-        .map(|f| f.file_name().unwrap_or_default().to_string_lossy().into_owned())
+        .map(|f| {
+            f.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
     let dir_names: Vec<String> = dirs
         .iter()
-        .map(|d| d.file_name().unwrap_or_default().to_string_lossy().into_owned())
+        .map(|d| {
+            d.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
 
     // Apply every detector. A dir can match multiple kinds.
@@ -174,13 +184,11 @@ fn find_projects_in_path(
             continue;
         }
 
-        job_sender
-            .send(Job {
-                path: dir.to_path_buf(),
-                include_git,
-                job_sender: job_sender.clone(),
-            })
-            .unwrap();
+        let _ = job_sender.send(Job {
+            path: dir.to_path_buf(),
+            include_git,
+            job_sender: job_sender.clone(),
+        });
     }
 
     if !found_targets.is_empty() {
@@ -188,9 +196,7 @@ fn find_projects_in_path(
             spinners::Spinners::Dots,
             format!("Analyzing {}", &path.to_string_lossy()),
         );
-        results
-            .send(ProjectTargetAnalysis::analyze(path, kinds, found_targets))
-            .unwrap();
+        let _ = results.send(ProjectTargetAnalysis::analyze(path, kinds, found_targets));
         sp.stop_with_symbol("✓");
         println!("\r");
     }
@@ -203,7 +209,7 @@ pub fn analyze_all_projects(
     mut num_threads: usize,
     include_git: bool,
 ) -> Vec<ProjectTargetAnalysis> {
-    num_threads = std::cmp::min(num_cpus::get(), num_threads);
+    num_threads = num_threads.max(1).min(num_cpus::get().max(1));
 
     println!("Using {} threads", num_threads);
 
@@ -227,17 +233,117 @@ pub fn analyze_all_projects(
                 });
             });
 
-        job_sender
-            .clone()
-            .send(Job {
-                path: path.to_path_buf(),
-                include_git,
-                job_sender,
-            })
-            .unwrap();
+        let _ = job_sender.clone().send(Job {
+            path: path.to_path_buf(),
+            include_git,
+            job_sender,
+        });
 
         result_receiver
     }
     .into_iter()
     .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        fs,
+        io::Write,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new(name: &str) -> Self {
+            let id = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
+            Self {
+                path: std::env::temp_dir()
+                    .join(format!("cargo-killer-{name}-{}-{id}", std::process::id())),
+            }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            if self.path.exists() {
+                fs::remove_dir_all(&self.path).expect("cleanup test directory");
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn recursive_scan_target_ignores_symlinks() {
+        let root = TestDir::new("symlink");
+        let target = root.path().join("target");
+        fs::create_dir_all(&target).expect("create target directory");
+        fs::write(target.join("artifact"), [0_u8; 4]).expect("write artifact");
+
+        std::os::unix::fs::symlink(target.join("artifact"), target.join("linked"))
+            .expect("create symlink");
+
+        let (size, _) = ProjectTargetAnalysis::recursive_scan_target(&target);
+        assert_eq!(size, 4);
+    }
+
+    #[test]
+    fn analyze_all_projects_detects_multiple_kinds_and_accepts_zero_threads() {
+        let root = TestDir::new("scan");
+        let project = root.path().join("combo");
+        fs::create_dir_all(project.join("target/debug")).expect("create cargo target");
+        fs::create_dir_all(project.join("node_modules")).expect("create node_modules");
+        fs::create_dir_all(project.join(".next/cache")).expect("create next cache");
+        fs::write(
+            project.join("Cargo.toml"),
+            "[package]\nname='combo'\nversion='0.1.0'\n",
+        )
+        .expect("write Cargo.toml");
+        fs::write(
+            project.join("package.json"),
+            r#"{"dependencies":{"next":"14"}}"#,
+        )
+        .expect("write package.json");
+        fs::write(project.join("target/debug/artifact"), [0_u8; 2]).expect("write artifact");
+        fs::write(project.join("node_modules/module"), [0_u8; 3]).expect("write module");
+        fs::write(project.join(".next/cache/item"), [0_u8; 5]).expect("write cache item");
+
+        let projects = analyze_all_projects(root.path(), 0, false);
+
+        assert_eq!(projects.len(), 1);
+        let analysis = &projects[0];
+        assert_eq!(analysis.project_path, project);
+        assert_eq!(analysis.kinds, vec!["cargo", "npm"]);
+        assert_eq!(analysis.targets, vec!["target", "node_modules", ".next"]);
+        assert_eq!(analysis.size, 10);
+    }
+
+    #[test]
+    fn analyze_all_projects_surfaces_git_only_when_requested() {
+        let root = TestDir::new("git");
+        let checkout = root.path().join("checkout");
+        fs::create_dir_all(checkout.join(".git/objects")).expect("create git directory");
+        let mut file =
+            fs::File::create(checkout.join(".git/objects/object")).expect("create git object");
+        file.write_all(&[0_u8; 7]).expect("write git object");
+
+        let without_git = analyze_all_projects(root.path(), 2, false);
+        assert!(without_git.is_empty());
+
+        let with_git = analyze_all_projects(root.path(), 2, true);
+        assert_eq!(with_git.len(), 1);
+        assert_eq!(with_git[0].kinds, vec!["git"]);
+        assert_eq!(with_git[0].targets, vec![".git"]);
+        assert_eq!(with_git[0].size, 7);
+    }
 }

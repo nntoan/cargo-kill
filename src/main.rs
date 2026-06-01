@@ -1,5 +1,4 @@
 use crate::find::{analyze_all_projects, ProjectTargetAnalysis};
-use bytefmt;
 use clap::Parser;
 use inquire::{
     list_option::ListOption,
@@ -17,7 +16,7 @@ mod utils;
     author,
     version,
     about,
-    bin_name = "cargo kill-all",
+    bin_name = "cargo killer",
     long_about = "Scan a directory tree for cargo and npm projects (and optionally .git directories) and reclaim their build/cache space."
 )]
 struct KillArgs {
@@ -48,17 +47,18 @@ struct KillArgs {
 }
 
 fn main() {
-    let mut args = std::env::args();
+    let mut args: Vec<String> = std::env::args().collect();
 
-    // When called using `cargo kill-all` the argument `kill-all` is inserted.
-    // It is not required, so remove  it
-    if let Some("kill-all") = std::env::args().nth(1).as_deref() {
-        args.next();
+    // When called using `cargo killer` the argument `killer` is inserted.
+    // It is not required, so remove it.
+    let is_cargo_subcommand_invocation = std::env::var_os("CARGO").is_some();
+    if is_cargo_subcommand_invocation && args.get(1).map(String::as_str) == Some("killer") {
+        args.remove(1);
     }
     let args = KillArgs::parse_from(args);
 
     let mut projects = analyze_all_projects(
-        &Path::new(&args.root_dir),
+        Path::new(&args.root_dir),
         args.num_threads,
         args.include_git,
     );

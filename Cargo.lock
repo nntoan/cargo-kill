@@ -116,7 +116,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cargo-kill-all"
+name = "cargo-killer"
 version = "0.4.0"
 dependencies = [
  "bytefmt",
